@@ -40,6 +40,7 @@ export function prTooltip(task: PrTask, now = Date.now()): string | null {
 }
 
 /** The status pill to show: "merged" for a task that is done because its PR merged, else the task's status. */
-export type BadgeStatus = TaskStatus | "merged"
-export const badgeStatus = (task: Pick<Task, "status" | "prUrl" | "prState">): BadgeStatus =>
-  task.status === "done" && task.prUrl && task.prState === "merged" ? "merged" : task.status
+export type BadgeStatus = TaskStatus | "merged" | "limit"
+/** "limit": failed on a usage limit and waiting for it to reset (Box Yard resumes it by itself). */
+export const badgeStatus = (task: Pick<Task, "status" | "prUrl" | "prState"> & { limitWait?: Task["limitWait"] }): BadgeStatus =>
+  task.status === "done" && task.prUrl && task.prState === "merged" ? "merged" : task.status === "failed" && task.limitWait ? "limit" : task.status

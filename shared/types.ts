@@ -22,6 +22,7 @@ import type { TaskPriority } from "./priority.js"
 import type { ProjectGpuMachine, RunPodImageBuild } from "./runpod.js"
 import type { DockerImageBuild, ProjectDocker } from "./docker.js"
 export type { TaskOutcome } from "./quiet.js"
+import type { UsageLimitKind } from "./usageLimit.js"
 export type { BoxCleanup } from "./disk.js"
 export type { BoxResize, ResizePlan, ResizeInitiator, ResizeMode, ResizeStep, DiskFit } from "./boxSizes.js"
 export type { BoxEvent, BoxEventFilter, BoxEventType, BoxActor, BoxActorKind } from "./boxHistory.js"
@@ -208,6 +209,8 @@ export interface Task {
   /** Until there is a summary: the latest assistant text or tool call as one line (shared/activity.ts), for cards. */
   activity?: string | null
   error: string | null
+  /** A failed task that stopped on a Claude usage limit and resumes by itself once it clears (docs/usage-limit-resume.md). */
+  limitWait?: { kind: UsageLimitKind; resetsAt: number | null } | null
   /** Why a queued task is held back beyond a free slot, e.g. "Waiting for disk cleanup on box-1". */
   waitReason: string | null
   /** Set when that wait is for a box of at least this size (the project's box size): no such box has room yet. */
@@ -845,6 +848,8 @@ export interface Settings {
    * default branch), Box Yard closes the same-repo issues its title and body name with a closing keyword.
    */
   closeIssuesOnMerge: boolean
+  /** Work that stopped on a Claude usage limit resumes by itself once the limit clears (docs/usage-limit-resume.md). */
+  resumeAfterUsageLimit: boolean
   /** The CLI the Coordinator runs on (shared/agentCli.ts): Claude Code unless set to Codex. */
   orchestratorCli: ManagerCli
   orchestratorModel: string

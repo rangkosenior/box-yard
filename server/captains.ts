@@ -54,6 +54,8 @@ import { TurnClock, turnTiming, type McpHandshakes } from "./turnTimings.js"
 import { captainReplyWakes, takeFyiMarker } from "./captainWake.js"
 import { NO_PICKS, turnPicks, type TurnPicks } from "../shared/runTargets.js"
 import { pickNotes } from "./runTargets.js"
+import { parseUsageLimit } from "../shared/usageLimit.js"
+import type { UsageLimitWatch } from "./usageLimitWatch.js"
 import { CAPTAIN_STOPPED_REPLY, STOPPED_LINE, STOPPED_META, STOPPED_NOTE } from "./stoppedTurn.js"
 import { CaptainRepo, DEFAULT_REPO_TUNING, ago, captainsWithClones, cloneDenyRules, hasLeftoverClone, reposToRemove, type GitAuth, type RepoTuning } from "./captainRepo.js"
 import type { Attachment, CaptainCompaction, CaptainMessage, CaptainSource, CaptainState, CompactionRecord, CompactionTaskSnapshot, ContextUsage, Project, Task } from "../shared/types.js"
@@ -259,6 +261,8 @@ export class CaptainManager {
   prs: PrLookup | null = null
   /** The Claude and Codex logins Captain runs rotate over (docs/logins.md); app.ts wires them in. */
   logins: AgentLogins | null = null
+  /** Turns that stop on a Claude usage limit wait here and resume by itself (server/usageLimitWatch.ts); app.ts wires it in. */
+  usageLimits: Pick<UsageLimitWatch, "stall" | "has"> | null = null
   /** How Box Yard's git on this computer reaches a project's repo, for its Captain's clone (app.ts: TaskManager.localGitAuth). */
   gitAuth: ((projectId: string) => GitAuth) | null = null
   /** The external MCP connectors a session gets (docs/connectors.md › Sessions); app.ts wires them in. */
@@ -300,6 +304,7 @@ export class CaptainManager {
         () => this.logins,
         () => this.gitAuth?.(project.id) ?? null,
         () => (this.connectors ? this.connectors({ kind: "captain", projectId: project.id }) : Promise.resolve(NO_SESSION_CONNECTORS)),
+        () => this.usageLimits,
       )
       this.captains.set(project.id, captain)
     }
@@ -571,8 +576,16 @@ export class CaptainManager {
   resume() {
     const queued = new Set(this.store.queuedCaptainProjectIds())
     for (const p of this.store.listProjects()) {
+      // One waiting on a usage limit resumes when it clears, not now.
+      if (this.usageLimits?.has({ type: "captain", id: p.id })) continue
       if (queued.has(p.id) || this.store.getKv(openTurnKey(p.id)) !== null) this.get(p.id).resume()
     }
+  }
+
+  /** The usage-limit watch's resume: the Captain answers the messages its limit-stopped turn left. False: nothing to answer. */
+  resumeAfterUsageLimit(projectId: string): boolean {
+    if (!this.store.getProject(projectId)) return false
+    return this.get(projectId).resumeAfterUsageLimit()
   }
 
   anyBusy() {
@@ -655,6 +668,7 @@ class Captain {
     gitAuth: () => GitAuth | null = () => null,
     /** The connectors its sessions get: its project's Captain's (docs/connectors.md › Scope). */
     private readonly connectors: () => Promise<SessionConnectors> = () => Promise.resolve(NO_SESSION_CONNECTORS),
+    private readonly usageLimits: () => Pick<UsageLimitWatch, "stall" | "has"> | null = () => null,
   ) {
     this.loopGuard = new WakeLoopGuard(tuning.loopGuard)
     this.mcp = mcp
@@ -944,11 +958,11 @@ class Captain {
   }
 
   private async drain() {
-    if (this.running || this.stopped || this.store.projectDeletionPending(this.project.id) || !this.store.getProject(this.project.id)) return
+    if (this.running || this.stopped || this.limitHeld() || this.store.projectDeletionPending(this.project.id) || !this.store.getProject(this.project.id)) return
     this.running = true
     this.publishState()
     try {
-      while (!this.stopped && (this.pending || this.wakeWanted || this.compactWanted)) {
+      while (!this.stopped && !this.limitHeld() && (this.pending || this.wakeWanted || this.compactWanted)) {
         // A turn after a stopped one (for a message queued meanwhile): the chats showed idle from the Stop.
         if (this.stopShown) {
           this.stopShown = false
@@ -1008,6 +1022,18 @@ class Captain {
     void this.drain()
   }
 
+  /** Waiting on a usage limit: no turn starts until the watch resumes it, so none is wasted on the same error. */
+  private limitHeld(): boolean {
+    return Boolean(this.usageLimits()?.has({ type: "captain", id: this.project.id }))
+  }
+
+  /** The turn a usage limit stopped is still open (its reply never cleared openTurnKey): answer its messages now. */
+  resumeAfterUsageLimit(): boolean {
+    if (this.store.getKv(openTurnKey(this.project.id)) === null) return false
+    this.resume()
+    return true
+  }
+
   private async turn() {
     const answering = this.unansweredUserMessages()
     const codex = this.cli() === "codex"
@@ -1053,7 +1079,10 @@ class Captain {
       result = await this.runPrompt(prompt, false, ask, (reply) => {
         // Replied (or failed with an error shown in the chat): the messages are answered. A stop that killed the
         // turn before its reply leaves the mark for resume.
-        if (reply.ok || !this.stopped) this.store.setKv(openTurnKey(this.project.id), null)
+        // A turn a usage limit stopped stays open: the watch resumes it when the limit clears (resumeAfterUsageLimit).
+        const hit = !reply.ok && !reply.stopped && !this.stopped ? parseUsageLimit(reply.error) : null
+        const limited = Boolean(hit && this.usageLimits()?.stall({ type: "captain", id: this.project.id }, hit, this.cli() === "claude" && !this.claudeLogin()))
+        if (!limited && (reply.ok || !this.stopped)) this.store.setKv(openTurnKey(this.project.id), null)
         this.replyUpward(answering, reply)
       })
     } finally {

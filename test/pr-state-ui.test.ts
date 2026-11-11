@@ -32,4 +32,12 @@ describe("status pill", () => {
     // Still working on a merged PR: the live status wins.
     expect(badgeStatus({ status: "working", prUrl: url, prState: "merged" })).toBe("working")
   })
+
+  it("shows a task failed on a usage limit as waiting for it, not as failed", () => {
+    const limitWait = { kind: "five_hour", resetsAt: 1_800_000_000_000 } as const
+    expect(badgeStatus({ status: "failed", prUrl: null, prState: null, limitWait })).toBe("limit")
+    expect(badgeStatus({ status: "failed", prUrl: null, prState: null, limitWait: null })).toBe("failed")
+    // Once retried, it is no longer failed: the live status wins.
+    expect(badgeStatus({ status: "queued", prUrl: null, prState: null, limitWait })).toBe("queued")
+  })
 })

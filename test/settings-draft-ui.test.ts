@@ -292,6 +292,17 @@ describe("Settings drafts", () => {
     expect(writes()).toMatchObject([{ method: "PUT", url: "/api/agent-settings", body: { autoDoneOnMerge: false, closeIssuesOnMerge: false } }])
   })
 
+  it("Resume after usage limits is on by default and waits for Save", async () => {
+    section = "orchestrator"
+    render()
+    const resume = document.querySelector<HTMLInputElement>("[data-testid=resume-after-usage-limit]")!
+    expect(resume.checked).toBe(true)
+    await click(resume)
+    expect(writes()).toEqual([])
+    await click(saveButton())
+    expect(writes()).toMatchObject([{ method: "PUT", url: "/api/agent-settings", body: { resumeAfterUsageLimit: false } }])
+  })
+
   it("hook switches in Settings wait for Save", async () => {
     section = "hooks"
     render()

@@ -793,6 +793,17 @@ export function SettingsDialog({
                       {(s.closeIssuesOnMerge ?? true) ? "On: closed after a merge into an epic branch, with a comment" : "Off: only GitHub closes them (default branch)"}
                     </label>
                   </Row>
+                  <Row
+                    id={fid("rul")}
+                    label="Resume after usage limits"
+                    help="When Claude's 5-hour, weekly or monthly spend limit stops a task, a Captain or the Coordinator, Box Yard shows the work as waiting for the reset, checks the limit without using any model tokens (the same usage numbers Claude Code shows), and resumes the stalled work in its original order once the limit clears. Each item resumes at most 3 times a day. Off: a limit fails the work as before, and you press Retry yourself."
+                    hint={hint("resumeAfterUsageLimit")}
+                  >
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-300 sm:min-h-0">
+                      <input id={fid("rul")} type="checkbox" checked={s.resumeAfterUsageLimit ?? true} onChange={(e) => set("resumeAfterUsageLimit", e.target.checked)} data-testid="resume-after-usage-limit" />
+                      {(s.resumeAfterUsageLimit ?? true) ? "On: stalled work resumes by itself when the limit clears" : "Off: you press Retry after a limit"}
+                    </label>
+                  </Row>
                 </Panel>
               ) : category === "agents" ? (
                 <Panel section="agents">

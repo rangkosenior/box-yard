@@ -24,7 +24,7 @@ import { usePanels, viewOf } from "../lib/panelStack"
 import { navigateApp, openChat, taskSessionHref } from "../lib/navigation"
 import { focusComposer, pickFocusesComposer } from "../lib/chatSwitch"
 import { badgeStatus } from "../lib/prState"
-import { MERGED_BADGE, STATUS, cx } from "./ui"
+import { badgeLook, cx } from "./ui"
 import { ProjectAvatar, TaskStatusIcon, projectColorStyle } from "./TaskIcon"
 import { DismissButton, modalDepth } from "./Modal"
 import { TREE_STEP, TaskRow, TreeNode } from "./Sidebar"
@@ -45,7 +45,7 @@ export const CHAT_BAR = "relative flex h-full min-h-0 w-14 flex-none flex-col it
 
 const statusLabel = (t: Task) => {
   const s = badgeStatus(t)
-  return (s === "merged" ? MERGED_BADGE : STATUS[s]).label
+  return badgeLook(s).label
 }
 
 const NAME = "mt-1 mb-2 max-h-48 min-h-0 shrink truncate rounded-md px-1 py-2 text-xs text-zinc-500 [writing-mode:vertical-rl] rotate-180"

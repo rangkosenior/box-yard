@@ -13,9 +13,11 @@ afterEach(() => {
 describe("the built-in model list", () => {
   it("has today's models first, every alias the CLI takes, and older models", () => {
     const ids = BUILTIN_MODELS.map((m) => m.id)
-    expect(BUILTIN_MODELS.filter((m) => m.group === "latest").map((m) => m.id)).toEqual(["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"])
+    expect(BUILTIN_MODELS.filter((m) => m.group === "latest").map((m) => m.id)).toEqual(["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"])
     expect(ids).toEqual(expect.arrayContaining(["opus", "sonnet", "haiku", "fable", "best", "opusplan", "opus[1m]", "sonnet[1m]", "fable[1m]", "opusplan[1m]"]))
     expect(ids).toEqual(expect.arrayContaining(["claude-opus-4-6[1m]", "claude-sonnet-4-6[1m]", "claude-opus-4-1", "claude-haiku-4-5"]))
+    // Fable 5.1 is still offered, under Older.
+    expect(findModel(BUILTIN_MODELS, "claude-fable-5-1")).toMatchObject({ label: "Fable 5.1", group: "older", efforts: [...EFFORTS] })
     expect(new Set(ids).size).toBe(ids.length)
     // Every id passes the Settings / routing model check.
     for (const id of ids) expect(id).toMatch(/^[A-Za-z0-9._:\[\]/-]+$/)
@@ -31,6 +33,7 @@ describe("the built-in model list", () => {
 describe("checkEffort", () => {
   it("passes what a model takes, and anything for a model it doesn't know", () => {
     for (const e of EFFORTS) expect(checkEffort(BUILTIN_MODELS, "claude-opus-5-5", e)).toEqual({ ok: true })
+    for (const e of EFFORTS) expect(checkEffort(BUILTIN_MODELS, "claude-fable-5-2", e)).toEqual({ ok: true })
     expect(checkEffort(BUILTIN_MODELS, "my-proxy-model", "xhigh")).toEqual({ ok: true })
     expect(checkEffort(BUILTIN_MODELS, "claude-opus-4-6", "max")).toEqual({ ok: true })
   })
@@ -48,13 +51,15 @@ describe("mergeCliModels", () => {
     const rows: CliModelInfo[] = [
       { value: "default", resolvedModel: "claude-opus-5-5", supportsEffort: true, supportedEffortLevels: all },
       { value: "opus", resolvedModel: "claude-opus-5-5", supportsEffort: true, supportedEffortLevels: all },
-      { value: "best", resolvedModel: "claude-fable-5-1", supportsEffort: true, supportedEffortLevels: all },
+      { value: "fable", resolvedModel: "claude-fable-5-2", supportsEffort: true, supportedEffortLevels: all },
+      { value: "best", resolvedModel: "claude-fable-5-2", supportsEffort: true, supportedEffortLevels: all },
       { value: "haiku", resolvedModel: "claude-haiku-5-5", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high"] },
     ]
     const merged = mergeCliModels(BUILTIN_MODELS, rows)
     expect(merged.some((m) => m.id === "default")).toBe(false)
     expect(findModel(merged, "opus")?.note).toBe("Opus 5.5 now")
-    expect(findModel(merged, "best")?.note).toBe("Fable where your account has it, else Opus (Fable 5.1 now)")
+    expect(findModel(merged, "fable")?.note).toBe("Fable 5.2 now")
+    expect(findModel(merged, "best")?.note).toBe("Fable where your account has it, else Opus (Fable 5.2 now)")
     expect(findModel(merged, "haiku")?.efforts).toEqual(["low", "medium", "high"])
     expect(merged).toHaveLength(BUILTIN_MODELS.length)
     // The built-in list isn't changed.
@@ -67,11 +72,20 @@ describe("mergeCliModels", () => {
       { value: "claude-haiku-6", supportsEffort: false },
       { value: "turbo", displayName: "Turbo", resolvedModel: "claude-opus-5-5", supportsEffort: true },
     ])
-    expect(merged.filter((m) => m.group === "latest").map((m) => m.id)).toEqual(["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-sonnet-6", "claude-haiku-6"])
+    expect(merged.filter((m) => m.group === "latest").map((m) => m.id)).toEqual(["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-sonnet-6", "claude-haiku-6"])
     expect(findModel(merged, "claude-sonnet-6")).toMatchObject({ label: "Sonnet 6", efforts: all })
     expect(findModel(merged, "claude-haiku-6")).toMatchObject({ label: "Haiku 6", efforts: [] })
     expect(findModel(merged, "turbo")).toMatchObject({ group: "alias", note: "Opus 5.5 now", efforts: all })
     expect(findModel(merged, "sonnet")?.note).toBe("Sonnet 6 now")
+  })
+
+  it("says an older CLI's fable still runs Fable 5.1, without a second Fable 5.1 row", () => {
+    // Claude Code before 2.1.321 resolves fable to Fable 5.1.
+    const merged = mergeCliModels(BUILTIN_MODELS, [{ value: "fable", resolvedModel: "claude-fable-5-1", supportsEffort: true, supportedEffortLevels: all }])
+    expect(findModel(merged, "fable")?.note).toBe("Fable 5.1 now")
+    expect(merged.filter((m) => m.id === "claude-fable-5-1")).toHaveLength(1)
+    expect(merged.filter((m) => m.group === "latest").map((m) => m.id)[0]).toBe("claude-fable-5-2")
+    expect(merged).toHaveLength(BUILTIN_MODELS.length)
   })
 })
 

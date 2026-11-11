@@ -40,6 +40,8 @@ import { CHAT_ALLOWED_TOOLS, CHAT_TOOLS, attachedImages, chatClaudeLogin, codexA
 import { limitsOf, recordLimits } from "./loginLimits.js"
 import { codexModel, type ManagerCli } from "../shared/agentCli.js"
 import { TurnClock, turnTiming, type McpHandshakes } from "./turnTimings.js"
+import { parseUsageLimit } from "../shared/usageLimit.js"
+import type { UsageLimitWatch } from "./usageLimitWatch.js"
 import { retryOnNextLogin, rotationLoginRef, type AgentLogins, type PickedLogin } from "./agentLogins.js"
 import { isCredentialsLogin } from "../shared/agentLogins.js"
 import { NO_PICKS, turnPicks, type InlinePick, type RunTargetPick, type TurnPicks } from "../shared/runTargets.js"
@@ -176,6 +178,8 @@ export class Orchestrator {
    */
   private compactionSystemPrompt: string | null = null
   private lastError: string | null = null
+  /** Turns that stop on a Claude usage limit wait here and resume by itself (server/usageLimitWatch.ts); app.ts wires it in. */
+  usageLimits: Pick<UsageLimitWatch, "stall" | "has"> | null = null
   private readonly workdir: string
   readonly compactionsDir: string
   private readonly mcpConfigPath: string
@@ -612,11 +616,11 @@ export class Orchestrator {
   }
 
   private async drain() {
-    if (this.running || this.stopped) return
+    if (this.running || this.stopped || this.limitHeld()) return
     this.running = true
     this.hub.broadcast({ type: "chat.busy", busy: true })
     try {
-      while (!this.stopped && (this.pending || this.wakeWanted || this.compactWanted || this.nextScheduledRun())) {
+      while (!this.stopped && !this.limitHeld() && (this.pending || this.wakeWanted || this.compactWanted || this.nextScheduledRun())) {
         // A turn after a stopped one (for a message queued meanwhile): the chats showed idle from the Stop.
         if (this.stopShown) {
           this.stopShown = false
@@ -737,6 +741,7 @@ export class Orchestrator {
     // Codex sees attached images with the message itself; Claude Code opens them with Read.
     const images = this.cli() === "codex" ? answering.flatMap((m) => attachedImages(m.meta?.attachments)) : []
     // Messages sent during the last turn move to now, right before this turn's reply.
+    const answeredUntil = this.store.getKv("orchestrator_last_turn_at")
     const moved = this.store.deliverQueued("chat_messages", answering.map((m) => m.id))
     for (const d of moved) {
       const m = answering.find((x) => x.id === d.id)!
@@ -758,10 +763,26 @@ export class Orchestrator {
     }
     this.turnPicks = turnPicks(answering.map((m) => m.meta))
     try {
-      await this.runPrompt(prompt, { ...ask, images })
+      const result = await this.runPrompt(prompt, { ...ask, images })
+      // A turn a usage limit stopped leaves its messages unanswered: the watch resumes them when the limit clears.
+      const hit = !result.ok ? parseUsageLimit(result.error) : null
+      if (hit && this.usageLimits?.stall({ type: "coordinator", id: "coordinator" }, hit, this.cli() === "claude")) this.store.setKv("orchestrator_last_turn_at", answeredUntil)
     } finally {
       this.turnPicks = NO_PICKS
     }
+  }
+
+  /** Waiting on a usage limit: no turn starts until the watch resumes it, so none is wasted on the same error. */
+  private limitHeld(): boolean {
+    return Boolean(this.usageLimits?.has({ type: "coordinator", id: "coordinator" }))
+  }
+
+  /** The usage-limit watch's resume: answer the messages the limit-stopped turn left. False: nothing to answer. */
+  resumeAfterUsageLimit(): boolean {
+    if (!this.unansweredUserMessages().length) return false
+    this.pending = true
+    void this.drain()
+    return true
   }
 
   /** The tasks and projects Cody's message names, as they stand now (server/handoff.ts), so a quick question needs no lookup step. */

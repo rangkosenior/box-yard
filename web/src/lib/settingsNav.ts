@@ -37,6 +37,7 @@ export const SETTINGS_SECTIONS: SectionInfo[] = [
       "notesMaxTokens",
       "autoDoneOnMerge",
       "closeIssuesOnMerge",
+      "resumeAfterUsageLimit",
     ],
   },
   {

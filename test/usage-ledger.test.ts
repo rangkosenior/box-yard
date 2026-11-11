@@ -3,7 +3,7 @@ import { openDb } from "../server/db.js"
 import { Store } from "../server/store.js"
 import { SettingsStore } from "../server/settings.js"
 import { attributeCompute, buildUsageLedger, computeProvider, isDipBooking, type LedgerClaudeRow, type LedgerInput } from "../server/usageLedger.js"
-import { aggregateUsage, NONE, TOKEN_KINDS, type UsageFilter, type UsageGroup, type UsageLedger } from "../shared/usageLedger.js"
+import { aggregateUsage, modelLabel, NONE, TOKEN_KINDS, type UsageFilter, type UsageGroup, type UsageLedger } from "../shared/usageLedger.js"
 import { DAYTONA_RATES } from "../shared/daytona.js"
 import { tmpDir } from "./helpers.js"
 
@@ -139,6 +139,10 @@ describe("usage ledger aggregation", () => {
     expect(v.rows.find((r) => r.key === "provider:docker")).toMatchObject({ costUsd: 0, computeHours: 1, detail: "Your own hardware: $0" })
     // Compute priced from size × time, and the run the CLI didn't price, are estimates; Upstash measured CPU at Settings' rates too.
     expect(v.totals.estimatedUsd).toBeCloseTo(4.8 + 0.6 + 1.5 + 0.05, 9)
+  })
+
+  it("names each model's spend by its label, Fable 5.2 and Fable 5.1 apart", () => {
+    expect(["claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5-20261001", "my-proxy-model", "unknown"].map(modelLabel)).toEqual(["Fable 5.2", "Fable 5.1", "Opus 5.5", "my-proxy-model", "Unknown model"])
   })
 
   it("narrows by filter: a model has no compute, a provider has no LLM, a role's compute is its tasks' box time", () => {

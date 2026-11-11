@@ -71,6 +71,19 @@ describe("ModelPicker", () => {
     expect(last().model).toBe("sonnet[1m]")
   })
 
+  it("offers Fable 5.2 under Latest and keeps Fable 5.1 under Older", () => {
+    render("claude-fable-5-1", "high")
+    const select = $<HTMLSelectElement>("[data-testid=model]")!
+    const group = (label: string) => [...select.querySelector<HTMLOptGroupElement>(`optgroup[label="${label}"]`)!.querySelectorAll("option")].map((o) => o.textContent)
+    expect(group("Latest")[0]).toBe("Fable 5.2 · claude-fable-5-2")
+    expect(group("Older")).toContain("Fable 5.1 · claude-fable-5-1")
+    // A saved Fable 5.1 choice is still a listed model, not a custom ID.
+    expect(select.value).toBe("claude-fable-5-1")
+    expect($("[data-testid=model-custom]")).toBeNull()
+    pick("[data-testid=model]", "claude-fable-5-2")
+    expect(last().model).toBe("claude-fable-5-2")
+  })
+
   it("shows the CLI's list, with what each alias runs on now", () => {
     const models = mergeCliModels(BUILTIN_MODELS, [{ value: "opus", resolvedModel: "claude-opus-6", supportsEffort: true }])
     render("opus", "high", { models, source: "cli", cliVersion: "9.9.9", fetchedAt: 1 })
@@ -100,7 +113,7 @@ describe("ModelPicker", () => {
 
 describe("EffortPicker", () => {
   it("offers every level for today's models, with no warning", () => {
-    render("claude-fable-5-1", "max")
+    render("claude-fable-5-2", "max")
     expect(effortOptions()).toEqual(["Low", "Medium", "High", "Extra high", "Max"])
     expect($("[data-testid=effort-warning]")).toBeNull()
   })

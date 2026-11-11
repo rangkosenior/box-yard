@@ -3,13 +3,13 @@
 // ends, asks something or fails says nothing to someone who can't see the dot.
 import { useState } from "react"
 import { badgeStatus, type BadgeStatus } from "../lib/prState"
-import { MERGED_BADGE, STATUS } from "./ui"
+import { badgeLook } from "./ui"
 import type { Task } from "../../../shared/types"
 
 /** What it says when the open task moves to `status`; nothing for Starting, which Working follows at once. */
 export function taskStatusAnnouncement(title: string, status: BadgeStatus): string {
   if (status === "starting") return ""
-  return `${title}: ${status === "merged" ? MERGED_BADGE.label : STATUS[status].label}`
+  return `${title}: ${badgeLook(status).label}`
 }
 
 /** A polite live region, in the page from the start (one added with its text is often not read), silent until the state changes. */

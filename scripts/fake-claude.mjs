@@ -59,6 +59,7 @@
 // Logging in: a CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY containing "revoked" fails like a bad token, one
 // containing "limited" like a subscription at its usage limit (resetting in an hour), and FAKE_CLAUDE_LOGIN=required
 // fails every run that has neither, like the real CLI with no login.
+// FAKE_CLAUDE_LIMIT_FILE=<path>: while that file exists every run fails with its text as the error (a usage limit: delete the file to clear it).
 // Each turn reports its subscription's limits (a rate_limit_event) unless it runs on an API key; FAKE_CLAUDE_LIMITS=off
 // sends none and =full reports the 5-hour window spent.
 // The Merge PR button's standard message ("Merge your pull request #N") stands in for `gh pr merge` when
@@ -138,7 +139,7 @@ if (streamInput && inbox.first?.type !== "user") {
     : [
         { value: "default", resolvedModel: "claude-opus-5-5", displayName: "Default (recommended)", supportsEffort: true, supportedEffortLevels: all },
         { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus", supportsEffort: true, supportedEffortLevels: all },
-        { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable", supportsEffort: true, supportedEffortLevels: all },
+        { value: "fable", resolvedModel: "claude-fable-5-2", displayName: "Fable", supportsEffort: true, supportedEffortLevels: all },
         { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet", supportsEffort: true, supportedEffortLevels: all },
         { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku", supportsEffort: true, supportedEffortLevels: all },
       ]
@@ -877,6 +878,8 @@ async function turn(prompt, started) {
     ? "Invalid API key · Please run /login"
     : login.some((t) => t.includes("limited"))
       ? `Claude AI usage limit reached|${Math.floor(Date.now() / 1000) + 3600}`
+      : process.env.FAKE_CLAUDE_LIMIT_FILE && fs.existsSync(process.env.FAKE_CLAUDE_LIMIT_FILE)
+      ? fs.readFileSync(process.env.FAKE_CLAUDE_LIMIT_FILE, "utf8").trim()
       : process.env.FAKE_CLAUDE_LOGIN === "required" && !login.length
       ? "Not logged in · Please run /login"
       : null

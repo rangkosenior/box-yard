@@ -167,6 +167,8 @@ describe("Composer button picker panels", () => {
     expect(input().value).toBe("!codex:gpt-6.1-sol ")
     await open("agent")
     await tap(row("claude"))
+    expect(choices().slice(1, 3)).toEqual(["claude:claude-fable-5-2", "claude:claude-opus-5-5"])
+    expect(choices()).toContain("claude:claude-fable-5-1")
     await tap(row("claude:claude-opus-4-5"))
     expect(dialog()).toBeNull()
     expect(input().value).toBe("!claude:claude-opus-4-5 ")

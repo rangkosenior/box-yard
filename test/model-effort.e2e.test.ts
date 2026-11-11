@@ -116,7 +116,7 @@ describe("model and effort reach the claude CLI", () => {
       { runner: "box", model: "claude-sonnet-5-5", effort: "low" },
       { runner: "local", model: "opusplan", effort: "xhigh" },
       { runner: "docker", model: "claude-opus-4-6[1m]", effort: "max" },
-      { runner: "gpu", model: "claude-fable-5-1", effort: "medium" },
+      { runner: "gpu", model: "claude-fable-5-2", effort: "medium" },
     ] as const
     const tasks = await Promise.all(
       cases.map(async (c) => {
@@ -199,7 +199,7 @@ describe("GET /api/models", () => {
     expect(cli.models.find((m) => m.id === "opus")).toMatchObject({ group: "alias", note: "Opus 6 now" })
     // A model the CLI names that Box Yard doesn't know yet joins Latest.
     expect(cli.models.find((m) => m.id === "claude-opus-6")).toMatchObject({ label: "Opus 6", group: "latest" })
-    expect(cli.models.map((m) => m.id)).toEqual(expect.arrayContaining(["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opusplan", "sonnet[1m]", "claude-opus-4-6"]))
+    expect(cli.models.map((m) => m.id)).toEqual(expect.arrayContaining(["claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opusplan", "sonnet[1m]", "claude-opus-4-6"]))
 
     process.env.FAKE_CLAUDE_MODELS = "fail"
     const again = await call<ModelCatalog>(r, "GET", "/api/models?refresh=1")

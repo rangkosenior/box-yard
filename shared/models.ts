@@ -1,7 +1,8 @@
 // The Claude models and effort levels every model/effort picker offers (Settings › Coordinator and Box agents, the
 // New task dialog), and which effort levels each model takes. The server asks the installed claude CLI for its own
 // list (server/claudeModels.ts) and merges it over this one with `mergeCliModels`; this table is the fallback, read
-// from Claude Code 2.1.293's model registry and https://code.claude.com/docs/en/model-config.
+// from Claude Code 2.1.293's model registry and https://code.claude.com/docs/en/model-config, plus Fable 5.2
+// (Claude Code 2.1.321, where `fable` moved to it; https://platform.claude.com/docs/en/about-claude/models/overview).
 import { EFFORTS, type Effort } from "./types.js"
 
 export type ModelGroup = "latest" | "alias" | "older"
@@ -35,7 +36,7 @@ const NO_XHIGH: readonly Effort[] = ["low", "medium", "high", "max"]
 const NONE: readonly Effort[] = []
 
 export const BUILTIN_MODELS: readonly ClaudeModel[] = [
-  { id: "claude-fable-5-1", label: "Fable 5.1", group: "latest", efforts: ALL, note: "Most capable, for the hardest and longest tasks" },
+  { id: "claude-fable-5-2", label: "Fable 5.2", group: "latest", efforts: ALL, note: "Most capable, for the hardest and longest tasks" },
   { id: "claude-opus-5-5", label: "Opus 5.5", group: "latest", efforts: ALL, note: "Complex, everyday work" },
   { id: "claude-sonnet-5-5", label: "Sonnet 5.5", group: "latest", efforts: ALL, note: "Efficient for routine tasks" },
   { id: "claude-haiku-5-5", label: "Haiku 5.5", group: "latest", efforts: ALL, note: "Fastest, for quick answers" },
@@ -51,6 +52,7 @@ export const BUILTIN_MODELS: readonly ClaudeModel[] = [
   { id: "fable[1m]", label: "fable[1m]", group: "alias", efforts: ALL, note: "Fable with a 1M-token window (native)" },
   { id: "opusplan[1m]", label: "opusplan[1m]", group: "alias", efforts: ALL, note: "opusplan with 1M-token windows" },
 
+  { id: "claude-fable-5-1", label: "Fable 5.1", group: "older", efforts: ALL },
   { id: "claude-fable-5", label: "Fable 5", group: "older", efforts: ALL },
   { id: "claude-opus-5", label: "Opus 5", group: "older", efforts: ALL },
   { id: "claude-sonnet-5", label: "Sonnet 5", group: "older", efforts: ALL },
