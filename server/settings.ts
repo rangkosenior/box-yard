@@ -85,6 +85,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoDoneOnMerge: true,
   // On: Map 4's PRs merge into an epic branch, where GitHub doesn't close "Fixes #N" issues itself.
   closeIssuesOnMerge: true,
+  // On: a usage limit pauses work and it resumes by itself; off: a limit fails the work as before and Retry is by hand.
+  resumeAfterUsageLimit: true,
   orchestratorCli: DEFAULT_MANAGER_CLI,
   orchestratorModel: DEFAULT_MODEL,
   orchestratorCodexModel: "",
@@ -248,6 +250,7 @@ export const settingsPatch = z
     subtaskMaxChildren: z.number().int().min(SUBTASK_MAX_CHILDREN.min).max(SUBTASK_MAX_CHILDREN.max),
     autoDoneOnMerge: z.boolean(),
     closeIssuesOnMerge: z.boolean(),
+    resumeAfterUsageLimit: z.boolean(),
     orchestratorCli: z.enum(MANAGER_CLIS).describe('"claude" or "codex": Cursor and OpenCode run task agents only'),
     orchestratorModel: model,
     orchestratorCodexModel: codexModelSetting,

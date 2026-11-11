@@ -28,7 +28,7 @@ const ICON: Record<FailureKind, LucideIcon> = {
   unknown: TriangleAlert,
 }
 
-type FailedTask = Pick<Task, "id" | "status" | "error" | "agentCli">
+type FailedTask = Pick<Task, "id" | "status" | "error" | "agentCli" | "limitWait">
 
 /** Nothing unless the task failed with an error. */
 export function TaskFailure({ task, project, className }: { task: FailedTask; project?: Pick<Project, "identityId"> | null; className?: string }) {
@@ -43,7 +43,7 @@ function FailureBanner({ task, error, identityId, className }: { task: FailedTas
   const retry = useRetryTask()
   const openSettings = useOpenSettings()
   const [open, setOpen] = useState(false)
-  const f = explainFailure(error, { agentCli: task.agentCli, ownClaudeLogin: Boolean(identity?.claude), now })
+  const f = explainFailure(error, { agentCli: task.agentCli, ownClaudeLogin: Boolean(identity?.claude), now, resumesItself: Boolean(task.limitWait) })
   const more = failureHasMore(error, f)
   const rawId = `task-error-${task.id}`
   const settings = f.settings && (

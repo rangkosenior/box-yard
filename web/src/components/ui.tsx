@@ -63,6 +63,12 @@ export const STATUS: Record<TaskStatus, { label: string; dot: string; chip: stri
 /** The pill for a task that is done because its PR merged (see badgeStatus in lib/prState). */
 export const MERGED_BADGE = { label: "Merged", dot: "bg-merged", chip: "bg-merged/15 text-merged-fg" }
 
+/** The pill for a task waiting for a usage limit to reset (see badgeStatus in lib/prState). */
+export const LIMIT_BADGE = { label: "Waiting for limit", dot: "bg-amber-400", chip: "bg-amber-500/15 text-amber-300" }
+
+/** The label, dot and chip colours a status pill takes. */
+export const badgeLook = (status: BadgeStatus) => (status === "merged" ? MERGED_BADGE : status === "limit" ? LIMIT_BADGE : STATUS[status])
+
 /** Pass `badgeStatus(task)` to show a purple Merged pill instead of Done when the task's PR merged. */
 /**
  * A row's leading icon, centred on the first line of the text beside it however the text wraps. The box is one
@@ -124,7 +130,7 @@ export function AgentIcon({ busy, compacting = false, error = false, kind = "cap
 }
 
 export function StatusBadge({ status }: { status: BadgeStatus }) {
-  const s = status === "merged" ? MERGED_BADGE : STATUS[status]
+  const s = badgeLook(status)
   return (
     <span className={cx("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium", s.chip)}>
       <span className={cx("h-1.5 w-1.5 shrink-0 rounded-full", s.dot)} />
@@ -163,7 +169,7 @@ export const HEADER_FOLD = {
 
 /** The quiet form of StatusBadge for header meta rows: a colored dot and the label, no pill. */
 export function StatusDot({ status, title, children, className, labelClassName }: { status: BadgeStatus; title?: string; children?: ReactNode; className?: string; labelClassName?: string }) {
-  const s = status === "merged" ? MERGED_BADGE : STATUS[status]
+  const s = badgeLook(status)
   return (
     <span title={title} data-status={status} className={cx("inline-flex shrink-0 items-center gap-1.5 text-xs font-medium whitespace-nowrap", status === "idle" ? "text-zinc-400" : "text-zinc-200", className)}>
       <span className={cx("h-2 w-2 shrink-0 rounded-full", s.dot)} aria-hidden />

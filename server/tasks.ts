@@ -79,6 +79,8 @@ import { DOCKER_MAX_TASKS, DOCKER_NEEDS_CLAUDE_KEY, DOCKER_NEEDS_CODEX_KEY, DOCK
 import { isMachineBox, labelPhrase, machineBoxId, machineLabel, machineMatches, machineOfBox, normalizeLabel, pickMachine, type Machine, type MachineCandidate, type MachinePick } from "../shared/machines.js"
 import type { DockerContainerState } from "./providers/docker.js"
 import { SleepWatch, sleepLength } from "./sleep.js"
+import { parseUsageLimit, usageLimitName } from "../shared/usageLimit.js"
+import type { UsageLimitWatch } from "./usageLimitWatch.js"
 import { CLAUDE_CREDENTIAL_VARS, CODEX_CREDENTIAL_VARS, CURSOR_CREDENTIAL_VARS, GIT_AUTHOR_VARS, GLOBAL_CREDENTIALS, codexTurnLogin, credentialSet, cursorTurnLogin, openCodeTurnLogin, identityHomeEnv, ownGithubToken, splitCredentialSet, turnEnv, withBoxConnectors, type CodexTurnLogin, type CursorTurnLogin, type TurnEnv } from "./turnCredentials.js"
 import { NO_SESSION_CONNECTORS, type SessionConnectors } from "./connectors/sessions.js"
 import type { SessionRef } from "./connectors/connectors.js"
@@ -740,6 +742,8 @@ export class TaskManager {
   private diskHold = new Map<string, string>()
   private lowDiskNoticeAt = new Map<string, number>()
   /** Called after every notice; return true when another owner handled delivery. */
+  /** Work that stopped on a Claude usage limit waits here and resumes by itself (server/usageLimitWatch.ts). Set by app.ts. */
+  usageLimits: Pick<UsageLimitWatch, "stall"> | null = null
   onNotice: ((content: string, meta: Record<string, unknown> | null, opts: NoticeOptions) => boolean | void) | null = null
   /** Hands an agent's message_captain to its project's Captain (CaptainManager.fromAgent); null when there are no Captains. */
   onCaptainMessage: ((projectId: string, input: AgentCaptainMessage) => { message: CaptainMessage; heldUntil: number | null }) | null = null
@@ -2053,6 +2057,15 @@ export class TaskManager {
       this.retryPrompt(row),
       "system",
     )
+  }
+
+  /** The usage-limit watch's resume (server/usageLimitWatch.ts): retries a task still failed on the limit. False: nothing to do. */
+  resumeAfterUsageLimit(taskId: string): boolean {
+    const row = this.store.getTaskRow(taskId)
+    if (!row || row.status !== "failed" || row.current_turn_id || !this.store.turnFlags(row).limitWait) return false
+    this.addEvent(row.id, "The usage limit has cleared. Resuming the task.", { kind: "usage_limit" })
+    this.retryTask(row.id)
+    return true
   }
 
   async deleteTask(taskId: string) {
@@ -7541,6 +7554,11 @@ export class TaskManager {
     if (heldForKids) status = "waiting"
     const askOtherPrs = pr === "merged" && status === "idle" && this.autoDoneOnMerge(row) && this.mergeDoneBlocker(row) === "other_prs"
 
+    // A failure on a Claude usage limit waits for it to clear and resumes by itself (server/usageLimitWatch.ts): the task
+    // stays failed, but shows as waiting, and its failure isn't announced.
+    const limitHit = status === "failed" ? parseUsageLimit(error ?? "") : null
+    const ownLogin = !login || login.id === "lgn_local-claude"
+    const limitWait = limitHit && this.usageLimits?.stall({ type: "task", id: row.id }, limitHit, taskAgentCli(row) === "claude" && ownLogin && (!row.box_id || isLocalRunnerBox(row.box_id))) ? { kind: limitHit.kind, resetsAt: limitHit.resetsAt } : null
     const result = typeof ev.result === "string" ? ev.result : null
     const noopIgnored = flags.noop && !stopped ? noopBlockers(this.runEvidence(row, flags, status)) : []
     const outcome = flags.noop && !stopped && !noopIgnored.length ? "noop" : null
@@ -7559,7 +7577,7 @@ export class TaskManager {
       sessionId: typeof ev.sessionId === "string" ? ev.sessionId : undefined,
       lastActiveAt: Date.now(),
       question: status === "needs_input" ? (uncertain ? error : flags.asked ?? null) : null,
-      turnFlags: { interrupts: 0, ...(flags.hookIds ? { lastHookIds: flags.hookIds } : {}) },
+      turnFlags: { interrupts: 0, ...(flags.hookIds ? { lastHookIds: flags.hookIds } : {}), ...(limitWait ? { limitWait } : {}) },
       outcome,
     }, { quiet: stopped || agentWake })
     this.settleMergeRequest(row.id, "turn")
@@ -7588,6 +7606,7 @@ export class TaskManager {
     } else if (status === "needs_input") this.notice(`🙋 **${row.title}** needs you: ${uncertain ? error : flags.asked}`, { taskId: row.id })
     // Done here only when its PR merged (Done when its PR merges); a turn stopped by a close says nothing: Cody closed it.
     else if (status === "done" && !stopped) this.finishedNotice(row, `✅ **${row.title}** is done: ${gist}`, agentWake)
+    else if (status === "failed" && limitWait) this.addEvent(row.id, `Paused on Claude's ${usageLimitName(limitWait.kind)} limit${limitWait.resetsAt ? `, which resets ${new Date(limitWait.resetsAt).toLocaleString()}` : ""}. It resumes by itself once the limit clears.`, { kind: "usage_limit" })
     else if (status === "failed") this.notice(`❌ **${row.title}** failed: ${preview(error ?? "", 300, "call get_task for the full error")}`, { taskId: row.id })
     else if (!stopped && !more && (status === "idle" || status === "pr_ready")) {
       this.finishedNotice(row, `💬 **${row.title}** finished its turn: ${gist || "(no reply)"}`, agentWake)

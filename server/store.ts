@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { DB } from "./db.js"
 import type { ArchiveKind } from "./archive.js"
 import { redactPrivateKeys, redactValues } from "./redact.js"
+import type { UsageLimitKind } from "../shared/usageLimit.js"
 import { BOX_SIZES, TASK_STATUSES, WAIT_FIXES, shouldNotify, weakerSource } from "../shared/types.js"
 import { activityLine } from "../shared/activity.js"
 import { todaysRaise } from "./cloudLimit.js"
@@ -151,6 +152,8 @@ export interface TurnFlags {
   oomRetries?: number
   /** A turn whose login hit its usage limit or was refused was retried on the next login (docs/logins.md); a second one fails as usual. */
   loginRetries?: number
+  /** The turn failed on a Claude usage limit and waits for it to clear (server/usageLimitWatch.ts); the task stays failed until then. */
+  limitWait?: { kind: UsageLimitKind; resetsAt: number | null }
   /** Hooks whose prompts started this turn (their inputs were in it), so they don't fire on it again. */
   hookIds?: string[]
   /** The same for the turn before, kept while the task rests (a PR merged later still knows who asked). */
@@ -1570,6 +1573,7 @@ export class Store {
       summary: row.summary,
       activity: row.summary === null ? lookups.activity(row.id) : null,
       error: row.error,
+      limitWait: row.status === "failed" ? (this.turnFlags(row).limitWait ?? null) : null,
       waitReason: row.status === "queued" ? (row.wait_reason ?? null) : null,
       waitBoxSize: row.status === "queued" && row.wait_reason && row.wait_box_size ? normalizeBoxSize(row.wait_box_size) : null,
       waitFor: row.status === "queued" && row.wait_reason ? json<WaitFor[]>(row.wait_for_json ?? null, []) : [],

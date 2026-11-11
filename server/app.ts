@@ -4,6 +4,8 @@ import path from "node:path"
 import { randomBytes, randomUUID } from "node:crypto"
 import { execFile } from "node:child_process"
 import { z } from "zod"
+import { readClaudeUsage, type UsageReading } from "./claudeUsage.js"
+import { UsageLimitWatch } from "./usageLimitWatch.js"
 import { selfUrl } from "./bind.js"
 import { browserBoundary, secureBrowserCookie } from "./browserBoundary.js"
 import { configProblems, qstashEnabled, redisEnabled, tildePath, type Config } from "./config.js"
@@ -444,6 +446,8 @@ export function createBoxYard(
     /** Tests: stand-ins for the SSH machines' transport (a fake ssh), this computer's ~/.ssh and SSH agent. */
     machines?: Pick<MachineServiceDeps, "transport" | "keys" | "sshBin" | "mock">
     webDir?: string
+    /** Stands in for the usage endpoint's reading (tests): the real one reads this computer's Claude login and asks Anthropic. */
+    usageProbe?: () => Promise<UsageReading>
     qstash?: QStash | null
     now?: () => number
     github?: TaskManagerDeps["github"]
@@ -779,6 +783,18 @@ export function createBoxYard(
     ownerName: () => settings.get().ownerName,
     statusOnly: (projectId) => identities.statusOnly(projectId),
   })
+  // Work a Claude usage limit stopped resumes by itself once the limit clears (docs/usage-limit-resume.md).
+  const usageLimits = new UsageLimitWatch({
+    kv: { get: (k) => store.getKv(k), set: (k, v) => store.setKv(k, v) },
+    enabled: () => settings.get().resumeAfterUsageLimit,
+    probe: opts.usageProbe ?? (c.mock ? async () => ({ ok: false, why: "no_login" }) : () => readClaudeUsage()),
+    resume: (item) => (item.type === "task" ? tasks.resumeAfterUsageLimit(item.id) : item.type === "captain" ? captains.resumeAfterUsageLimit(item.id) : orchestrator.resumeAfterUsageLimit()),
+    notice: (text) => tasks.notice(text, null, { wake: false }),
+    now: opts.now,
+  })
+  tasks.usageLimits = usageLimits
+  captains.usageLimits = usageLimits
+  orchestrator.usageLimits = usageLimits
   hooks.start()
   const notes = new ProjectNotes({
     store,
@@ -2188,6 +2204,8 @@ export function createBoxYard(
     async start() {
       // A "This computer" setup's gh login can stand in for the GitHub token: look for it before PRs are followed.
       if (setup.onThisComputer()) await setup.refreshLocal()
+      // Before anything resumes, so a Captain or the Coordinator waiting on a limit isn't started now.
+      usageLimits.start()
       await tasks.start()
       machine.start()
       scheduler.start()
@@ -2209,6 +2227,7 @@ export function createBoxYard(
       })
     },
     stop() {
+      usageLimits.stop()
       retro.stop()
       hooks.stop()
       scheduler.stop()

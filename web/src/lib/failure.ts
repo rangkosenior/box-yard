@@ -43,6 +43,8 @@ export interface FailureContext {
   /** The project's identity has a Claude login of its own (Settings › Identities), not Settings › Credentials' one. */
   ownClaudeLogin?: boolean
   now?: number
+  /** The server holds the task for the limit and resumes it by itself (Task.limitWait). */
+  resumesItself?: boolean
 }
 
 const API_ERROR = /\bAPI Error:\s*(\d{3})/i
@@ -72,6 +74,14 @@ export function explainFailure(error: string, ctx: FailureContext = {}): Failure
         : reset.resetsText
           ? `It resets ${reset.resetsText}.`
           : "It resets on its own after a while."
+    if (ctx.resumesItself)
+      return {
+        kind: "usage_limit",
+        title: `Waiting for ${agent}'s usage limit to reset`,
+        detail: `${passed ? "It has reset since." : when} Box Yard resumes this by itself once the limit clears. Retry now to try sooner.`,
+        waitFirst: true,
+        ...reset,
+      }
     return {
       kind: "usage_limit",
       title: `${agent}'s usage limit is used up`,
