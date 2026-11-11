@@ -123,6 +123,11 @@ describe("parseNotice", () => {
     expect(n).toEqual({ kind: "settings", title: "Settings", summary: [{ text: "maxBoxes 5 → 20, slotsPerBox 2 → 3. Reason: Cody asked for more boxes" }], truncated: false })
   })
 
+  it("reads the usage-limit watch's pause and resume notices", () => {
+    expect(parseNotice("⚠ **Usage limit** paused work: Claude's 5-hour limit is used up. It resets 6:20 PM.")).toMatchObject({ kind: "warning", title: "Usage limit" })
+    expect(parseNotice("▶ **Usage limit** cleared: 2 tasks and the Coordinator resumed.")).toMatchObject({ kind: "info", title: "Usage limit", summary: [{ text: "2 tasks and the Coordinator resumed." }] })
+  })
+
   it("drops an empty status detail instead of showing a dangling colon", () => {
     expect(parseNotice("✅ **A** is done: ").summary).toEqual([{ text: "is done" }])
   })

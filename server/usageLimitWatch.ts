@@ -42,6 +42,8 @@ export interface WatchDeps {
   /** A line for the yard's updates: said once when work pauses and once when it resumes. */
   notice(text: string): void
   now?: () => number
+  /** Tests: the wait after a reset time before asking (BUFFER_MS). */
+  bufferMs?: number
 }
 
 export const KV_KEY = "usage_limit_pause"
@@ -74,7 +76,11 @@ export class UsageLimitWatch {
   private checking = false
   private stopped = false
 
-  constructor(private readonly d: WatchDeps) {}
+  private readonly buffer: number
+
+  constructor(private readonly d: WatchDeps) {
+    this.buffer = d.bufferMs ?? BUFFER_MS
+  }
 
   private now() {
     return this.d.now?.() ?? Date.now()
@@ -110,7 +116,8 @@ export class UsageLimitWatch {
     const recent = (this.state.attempts[key(item)] ?? []).filter((t) => now - t < ATTEMPT_WINDOW_MS)
     if (recent.length >= MAX_ATTEMPTS) return false
     const first = !this.state.entries.length
-    const again = recent.length > 0 && now - recent[recent.length - 1]! < RESTALL_QUIET_MS
+    const lastTry = Math.max(recent.at(-1) ?? 0, this.state.trials[key(item)] ?? 0)
+    const again = lastTry > 0 && now - lastTry < RESTALL_QUIET_MS
     this.state.entries = this.state.entries.filter((e) => key(e.item) !== key(item))
     this.state.entries.push({ item, kind: hit.kind, resetsAt: hit.resetsAt, since: now, local })
     this.save()
@@ -127,7 +134,7 @@ export class UsageLimitWatch {
     let next = now + MAX_STEP_MS
     for (const e of this.state.entries) {
       const tried = this.state.trials[key(e.item)]
-      next = Math.min(next, e.resetsAt !== null ? e.resetsAt + BUFFER_MS : tried ? tried + TRIAL_MS : now + (e.kind === "monthly" ? MONTHLY_RECHECK_MS : RECHECK_MS))
+      next = Math.min(next, e.resetsAt !== null ? e.resetsAt + this.buffer : tried ? tried + TRIAL_MS : now + (e.kind === "monthly" ? MONTHLY_RECHECK_MS : RECHECK_MS))
     }
     return Math.max(next, now + 1000)
   }
@@ -158,7 +165,9 @@ export class UsageLimitWatch {
         this.save()
         return
       }
-      const reading: UsageReading | null = this.state.entries.some((e) => e.local) ? await this.d.probe() : null
+      // Asked only once something is due: a reset time not yet reached needs no look.
+      const due = (e: Entry) => e.resetsAt === null || e.resetsAt + this.buffer <= this.now()
+      const reading: UsageReading | null = this.state.entries.some((e) => e.local && due(e)) ? await this.d.probe() : null
       const now = this.now()
       const blockers = reading?.ok ? reading.full : null
       const ready: Entry[] = []
@@ -170,10 +179,10 @@ export class UsageLimitWatch {
           const full: FullLimit[] = e.kind === "monthly" ? blockers : blockers.filter((b) => b.kind !== "monthly")
           if (!full.length) wait = null
           else {
-            const resets = full.map((b) => b.resetsAt).filter((t): t is number => t !== null && t + BUFFER_MS > now)
-            wait = resets.length === full.length ? Math.max(...resets) + BUFFER_MS : now + (e.kind === "monthly" ? MONTHLY_RECHECK_MS : RECHECK_MS)
+            const resets = full.map((b) => b.resetsAt).filter((t): t is number => t !== null && t + this.buffer > now)
+            wait = resets.length === full.length ? Math.max(...resets) + this.buffer : now + (e.kind === "monthly" ? MONTHLY_RECHECK_MS : RECHECK_MS)
           }
-        } else if (e.resetsAt !== null) wait = e.resetsAt + BUFFER_MS > now ? e.resetsAt + BUFFER_MS : null
+        } else if (e.resetsAt !== null) wait = e.resetsAt + this.buffer > now ? e.resetsAt + this.buffer : null
         else {
           const tried = this.state.trials[key(e.item)]
           wait = tried && tried + TRIAL_MS > now ? tried + TRIAL_MS : null

@@ -448,6 +448,8 @@ export function createBoxYard(
     webDir?: string
     /** Stands in for the usage endpoint's reading (tests): the real one reads this computer's Claude login and asks Anthropic. */
     usageProbe?: () => Promise<UsageReading>
+    /** Tests: how long the usage-limit watch waits after a reset time before it resumes work (a minute). */
+    usageLimitBufferMs?: number
     qstash?: QStash | null
     now?: () => number
     github?: TaskManagerDeps["github"]
@@ -791,6 +793,7 @@ export function createBoxYard(
     resume: (item) => (item.type === "task" ? tasks.resumeAfterUsageLimit(item.id) : item.type === "captain" ? captains.resumeAfterUsageLimit(item.id) : orchestrator.resumeAfterUsageLimit()),
     notice: (text) => tasks.notice(text, null, { wake: false }),
     now: opts.now,
+    bufferMs: opts.usageLimitBufferMs,
   })
   tasks.usageLimits = usageLimits
   captains.usageLimits = usageLimits

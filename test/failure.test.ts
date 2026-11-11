@@ -19,6 +19,16 @@ describe("explainFailure: usage limits", () => {
     expect(f.settings).toEqual({ section: "credentials", label: "Claude logins" })
   })
 
+  it("says Box Yard resumes it by itself when the server holds the task for the limit", () => {
+    const resets = at(15, 17)
+    const f = explainFailure(`You've hit your monthly spend limit · your 5-hour limit resets 3:17pm|${resets / 1000}`, { now: NOW, resumesItself: true })
+    expect(f).toMatchObject({ kind: "usage_limit", title: "Waiting for Claude's usage limit to reset", waitFirst: true, resetsAt: resets })
+    expect(f.detail).toBe(`It resets at ${time(resets)} (in 2h 17m). Box Yard resumes this by itself once the limit clears. Retry now to try sooner.`)
+    expect(f.detail).not.toContain("login")
+    // Once it has reset, the check is about to run.
+    expect(explainFailure(`Claude AI usage limit reached|${at(12) / 1000}`, { now: NOW, resumesItself: true }).detail).toMatch(/^It has reset since\. Box Yard resumes this by itself/)
+  })
+
   it("says a retry should go through once the reset time has passed", () => {
     const f = explainFailure(`Claude AI usage limit reached|${at(12) / 1000}`, { now: NOW })
     expect(f.detail).toBe("It has reset since, so a retry should go through.")

@@ -89,6 +89,17 @@ describe("TaskFailure", () => {
     expect($("failure-raw")).toBeNull()
   })
 
+  it("tells a task Box Yard holds for a usage limit that it resumes by itself", () => {
+    const resets = Date.now() + 3 * 3600_000
+    render(task({ error: `You've hit your 5-hour limit|${Math.floor(resets / 1000)}`, limitWait: { kind: "five_hour", resetsAt: resets } }))
+    expect($("failure-title")!.textContent).toBe("Waiting for Claude's usage limit to reset")
+    expect($("failure-detail")!.textContent).toContain("Box Yard resumes this by itself once the limit clears")
+    expect($("failure-retry")!.textContent).toContain("Retry now")
+    // Without Box Yard holding it (the setting is off), the banner is the plain failure.
+    render(task({ error: `You've hit your 5-hour limit|${Math.floor(resets / 1000)}` }))
+    expect($("failure-title")!.textContent).toBe("Claude's usage limit is used up")
+  })
+
   it("opens the Settings page that fixes it", () => {
     render(task())
     click($("failure-settings"))

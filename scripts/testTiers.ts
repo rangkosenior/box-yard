@@ -10,6 +10,7 @@ export const SLOW_TESTS: Record<string, string> = {
   "test/github-reference-route.test.ts": "Full Box Yard server/HTTP fixture",
   "test/automation-status-only-mcp.test.ts": "Full server/task-manager MCP fixture",
   "test/agent-logins.e2e.test.ts": "End-to-end runner/server integration",
+  "test/usage-limit-resume.e2e.test.ts": "Full Box Yard server/task-manager/Captain/Coordinator fixture",
   "test/agent-wake.e2e.test.ts": "End-to-end runner/server integration",
   "test/archive-shutdown.test.ts": "Full Box Yard server/task-manager fixture",
   "test/archive-stream.test.ts": "Real Git repositories/configuration or archive/bundle operations",
